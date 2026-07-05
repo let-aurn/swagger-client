@@ -1,0 +1,52 @@
+{
+  "name": "@let-aurn/swagger-client",
+  "version": "0.1.0",
+  "description": "Generate typed Angular and React clients from OpenAPI JSON files.",
+  "type": "module",
+  "bin": {
+    "swagger-client": "./dist/cli/index.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist test/tmp",
+    "test": "npm run build && node --test test/*.test.mjs"
+  },
+  "keywords": [
+    "openapi",
+    "swagger",
+    "typescript",
+    "angular",
+    "react",
+    "client"
+  ],
+  "author": "let-aurn",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.0"
+  },
+  "peerDependencies": {
+    "@angular/common": ">=16",
+    "@angular/core": ">=16",
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "@angular/common": {
+      "optional": true
+    },
+    "@angular/core": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  }
+}

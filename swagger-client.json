@@ -1,0 +1,9 @@
+{
+  "client": "angular",
+  "swaggers-directory": "swaggers-examples/shop-api",
+  "output": {
+    "api-models.ts": "generated/api-models.ts",
+    "api-endpoints.ts": "generated/api-endpoints.ts",
+    "client.ts": "generated/swagger-client.ts"
+  }
+}
