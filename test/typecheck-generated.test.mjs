@@ -54,6 +54,7 @@ declare module 'react' {
 
   const result = await execFileAsync('npx', [
     'tsc',
+    '--ignoreConfig',
     `${root}/api-models.ts`,
     `${root}/api-endpoints.ts`,
     `${root}/swagger-client.ts`,
