@@ -48,7 +48,34 @@ bootstrapApplication(AppComponent, {
 });
 ```
 
-Custom HTTP implementations are supported:
+### Custom HTTP adapters
+
+Implement `SwaggerHttpClient` and pass the adapter class to `provideSwaggerClient`.
+The adapter receives `{ method, url, headers, query, body }` and returns an
+`Observable<T>` of the response body. For a transport returning `Promise<{ data: unknown }>`:
+
+```ts
+import { Injectable } from '@angular/core';
+import { defer, map, Observable } from 'rxjs';
+import type {
+  SwaggerHttpClient,
+  SwaggerHttpRequest
+} from './api/generated/swagger-client';
+import { NativeTransport } from './native-transport';
+
+@Injectable()
+export class MySwaggerHttpClient implements SwaggerHttpClient {
+  constructor(private readonly transport: NativeTransport) {}
+
+  request<T>(request: SwaggerHttpRequest): Observable<T> {
+    return defer(() => this.transport.request(request)).pipe(
+      map(response => response.data as T)
+    );
+  }
+}
+```
+
+Register the adapter class through `provideSwaggerClient`:
 
 ```ts
 provideSwaggerClient({
