@@ -28,12 +28,48 @@ npx swagger-client generate --config=swagger-client.json
 
 - `operationId` uses the OpenAPI `operationId` as-is. This is the default.
 - `tagAndOperationId` prefixes endpoint exports with the first OpenAPI tag, unless the `operationId` already starts with that tag.
+- `namespaceTagAndOperationId` adds a document namespace before the tag and operation ID. Requires `endpoint-namespace`.
 
 With `tagAndOperationId`, an operation tagged `SomeController` with `operationId: "someEndpoint"` is generated as:
 
 ```ts
 ApiEndpoints.SomeController_someEndpoint
 ```
+
+To include a namespace, configure where it comes from in each Swagger document:
+
+```json
+{
+  "endpoint-name-strategy": "namespaceTagAndOperationId",
+  "endpoint-namespace": {
+    "pointer": "/servers/0/url",
+    "pattern": "^/([^/]+)"
+  }
+}
+```
+
+For `servers: [{ "url": "/some-namespace/v1" }]`, tag `SomeController`, and
+operation ID `someMethod`, this generates:
+
+```ts
+ApiEndpoints.SomeNamespace_SomeController_someMethod
+```
+
+`pointer` is a JSON Pointer relative to the document root. It can select any
+string field, including custom extensions. Array indexes are path segments;
+escape `/` in property names as `~1` and `~` as `~0`.
+For example, `{ "pointer": "/info/x-namespace" }` uses that field's entire value.
+
+`pattern` is an optional JavaScript regular expression without delimiters or
+flags. When present, its first capture group supplies the namespace; without
+capture groups, the full match is used. Omit it to use the entire selected string.
+The namespace is converted to PascalCase. Only the first tag is used; operations
+without tags receive the namespace and operation ID. Existing tag or namespace
+prefixes followed by `_` are not repeated. Name collisions receive numeric suffixes.
+
+Extraction runs separately for each Swagger file. Missing or non-string fields,
+unmatched patterns, and empty namespaces fail generation with a file-specific
+error. This setting affects endpoint names only, not request URLs.
 
 ## Angular
 

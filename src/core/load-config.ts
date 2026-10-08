@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { validateEndpointNamespace } from "./endpoint-namespace.js";
 import type { SwaggerClientConfig } from "./types.js";
 
 /**
@@ -39,9 +40,14 @@ function validateConfig(config: SwaggerClientConfig, configPath: string): void {
   if (
     config["endpoint-name-strategy"] !== undefined &&
     config["endpoint-name-strategy"] !== "operationId" &&
-    config["endpoint-name-strategy"] !== "tagAndOperationId"
+    config["endpoint-name-strategy"] !== "tagAndOperationId" &&
+    config["endpoint-name-strategy"] !== "namespaceTagAndOperationId"
   ) {
-    throw new Error(`${configPath}: "endpoint-name-strategy" must be "operationId" or "tagAndOperationId".`);
+    throw new Error(`${configPath}: "endpoint-name-strategy" must be "operationId", "tagAndOperationId", or "namespaceTagAndOperationId".`);
+  }
+
+  if (config["endpoint-namespace"] !== undefined || config["endpoint-name-strategy"] === "namespaceTagAndOperationId") {
+    validateEndpointNamespace(config["endpoint-namespace"], configPath);
   }
 
   for (const key of ["api-models.ts", "api-endpoints.ts", "client.ts"] as const) {

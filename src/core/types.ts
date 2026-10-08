@@ -1,10 +1,18 @@
 export type ClientKind = "angular" | "react";
-export type EndpointNameStrategy = "operationId" | "tagAndOperationId";
+export type EndpointNameStrategy = "operationId" | "tagAndOperationId" | "namespaceTagAndOperationId";
+
+export interface EndpointNamespaceConfig {
+  /** JSON Pointer to a string in each OpenAPI document. */
+  pointer: string;
+  /** Optional regex: uses the first capture group, or the full match if none exists. */
+  pattern?: string;
+}
 
 export interface SwaggerClientConfig {
   client: ClientKind;
   "swaggers-directory": string;
   "endpoint-name-strategy"?: EndpointNameStrategy;
+  "endpoint-namespace"?: EndpointNamespaceConfig;
   output: {
     "api-models.ts": string;
     "api-endpoints.ts": string;

@@ -1,5 +1,7 @@
 export type {
   ClientKind,
+  EndpointNameStrategy,
+  EndpointNamespaceConfig,
   EndpointModel,
   ProjectModel,
   SchemaModel,

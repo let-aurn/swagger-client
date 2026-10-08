@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import type {
   EndpointNameStrategy,
+  EndpointNamespaceConfig,
   EndpointModel,
   HttpMethod,
   OpenApiDocument,
@@ -16,6 +17,8 @@ import type {
 import { schemaToType } from "./schema-to-typescript.js";
 import { ensureIdentifier, toPascalCase, uniqueName } from "./names.js";
 
+import { extractEndpointNamespace, validateEndpointNamespace } from "./endpoint-namespace.js";
+
 const HTTP_METHODS = new Set(["get", "post", "put", "patch", "delete", "head", "options"]);
 
 /**
@@ -23,13 +26,19 @@ const HTTP_METHODS = new Set(["get", "post", "put", "patch", "delete", "head", "
  *
  * @param swaggerDirectory The directory containing one or more OpenAPI JSON files.
  * @param endpointNameStrategy The strategy used to name generated endpoint constants.
+ * @param endpointNamespace Configurable document field and optional namespace extraction regex.
  * @returns The normalized schemas and endpoints discovered in the OpenAPI files.
  * @throws Error when a JSON file cannot be read or parsed.
  */
 export async function readOpenApiProject(
   swaggerDirectory: string,
-  endpointNameStrategy: EndpointNameStrategy = "operationId"
+  endpointNameStrategy: EndpointNameStrategy = "operationId",
+  endpointNamespace?: EndpointNamespaceConfig
 ): Promise<ProjectModel> {
+  if (endpointNameStrategy === "namespaceTagAndOperationId") {
+    validateEndpointNamespace(endpointNamespace, swaggerDirectory);
+  }
+
   const files = await findJsonFiles(swaggerDirectory);
   const schemas: SchemaModel[] = [];
   const endpoints: EndpointModel[] = [];
@@ -41,7 +50,10 @@ export async function readOpenApiProject(
     const sourceFile = relative(swaggerDirectory, file);
     const schemaNameMap = collectSchemas(document, schemas, usedSchemaNames);
 
-    endpoints.push(...collectEndpoints(document, sourceFile, schemaNameMap, usedEndpointNames, endpointNameStrategy));
+    const namespace = endpointNameStrategy === "namespaceTagAndOperationId"
+      ? extractEndpointNamespace(document, endpointNamespace!, sourceFile)
+      : undefined;
+    endpoints.push(...collectEndpoints(document, sourceFile, schemaNameMap, usedEndpointNames, endpointNameStrategy, namespace));
   }
 
   return { schemas, endpoints };
@@ -97,7 +109,8 @@ function collectEndpoints(
   sourceFile: string,
   schemaNameMap: Map<string, string>,
   usedEndpointNames: Set<string>,
-  endpointNameStrategy: EndpointNameStrategy
+  endpointNameStrategy: EndpointNameStrategy,
+  namespace?: string
 ): EndpointModel[] {
   const endpoints: EndpointModel[] = [];
 
@@ -112,7 +125,7 @@ function collectEndpoints(
       }
 
       const operationId = operation.operationId ?? fallbackOperationId(method, path);
-      const endpointName = uniqueName(endpointNameForOperation(operation, operationId, endpointNameStrategy), usedEndpointNames);
+      const endpointName = uniqueName(endpointNameForOperation(operation, operationId, endpointNameStrategy, namespace), usedEndpointNames);
       const parameters = operation.parameters ?? [];
 
       endpoints.push({
@@ -136,25 +149,26 @@ function collectEndpoints(
 function endpointNameForOperation(
   operation: OpenApiOperation,
   operationId: string,
-  strategy: EndpointNameStrategy
+  strategy: EndpointNameStrategy,
+  namespace?: string
 ): string {
   const operationName = ensureIdentifier(operationId, "endpoint");
 
-  if (strategy !== "tagAndOperationId") {
+  if (strategy === "operationId") {
     return operationName;
   }
 
   const tag = operation.tags?.[0];
-  if (!tag) {
-    return operationName;
+  const tagName = tag ? ensureIdentifier(toPascalCase(tag), "endpoint") : undefined;
+  const taggedName = !tagName || operationName === tagName || operationName.startsWith(`${tagName}_`)
+    ? operationName
+    : `${tagName}_${operationName}`;
+
+  if (!namespace || taggedName === namespace || taggedName.startsWith(`${namespace}_`)) {
+    return taggedName;
   }
 
-  const tagName = ensureIdentifier(toPascalCase(tag), "endpoint");
-  if (operationName === tagName || operationName.startsWith(`${tagName}_`)) {
-    return operationName;
-  }
-
-  return `${tagName}_${operationName}`;
+  return `${namespace}_${taggedName}`;
 }
 
 function variablesFor(

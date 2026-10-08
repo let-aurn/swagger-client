@@ -126,3 +126,37 @@ test('can prefix endpoint names with the first OpenAPI tag', async () => {
   assert.match(endpoints, /name: "SomeController_someEndpoint"/);
   assert.doesNotMatch(endpoints, /export const someEndpoint/);
 });
+
+test('prefixes endpoints with namespaces selected from each document', async () => {
+  const root = resolve('test/tmp/namespace-prefixed');
+  const swaggers = `${root}/swaggers`;
+  await rm(root, { recursive: true, force: true });
+  await mkdir(swaggers, { recursive: true });
+  for (const namespace of ['some-namespace', 'other-namespace']) {
+    await writeFile(`${swaggers}/${namespace}.json`, JSON.stringify({
+      servers: [{ url: `/${namespace}/v1` }],
+      paths: {
+        '/method': { get: { tags: ['SomeController', 'Ignored'], operationId: 'someMethod' } },
+        '/prefixed': { get: { tags: ['SomeController'], operationId: 'SomeController_prefixed' } },
+        '/untagged': { get: { operationId: 'untagged' } }
+      }
+    }));
+  }
+  await generate({
+    client: 'react',
+    'swaggers-directory': swaggers,
+    'endpoint-name-strategy': 'namespaceTagAndOperationId',
+    'endpoint-namespace': { pointer: '/servers/0/url', pattern: '^/([^/]+)' },
+    output: {
+      'api-models.ts': `${root}/api-models.ts`,
+      'api-endpoints.ts': `${root}/api-endpoints.ts`,
+      'client.ts': `${root}/client.ts`
+    }
+  });
+  const endpoints = await readFile(`${root}/api-endpoints.ts`, 'utf8');
+  for (const namespace of ['SomeNamespace', 'OtherNamespace']) {
+    assert.match(endpoints, new RegExp(`export const ${namespace}_SomeController_someMethod`));
+    assert.match(endpoints, new RegExp(`export const ${namespace}_SomeController_prefixed`));
+    assert.match(endpoints, new RegExp(`export const ${namespace}_untagged`));
+  }
+});
