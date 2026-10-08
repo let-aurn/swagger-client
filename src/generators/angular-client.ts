@@ -20,6 +20,7 @@ import type {
   AnyApiEndpoint,
   BodyVariablesOf,
   HeaderVariablesOf,
+  HttpMethod,
   PathVariablesOf,
   QueryVariablesOf,
   ResponseOf
@@ -37,7 +38,7 @@ export interface SwaggerClientConfig {
  * Describes an HTTP request produced by the generated swagger client.
  */
 export interface SwaggerHttpRequest {
-  method: string;
+  method: HttpMethod;
   url: string;
   headers?: Record<string, string>;
   query?: Record<string, unknown>;
