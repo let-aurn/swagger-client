@@ -15,7 +15,7 @@ import { emitReactClient } from "../generators/react-client.js";
  * @throws Error when OpenAPI files cannot be read or generated files cannot be written.
  */
 export async function generate(config: SwaggerClientConfig): Promise<void> {
-  const project = await readOpenApiProject(config["swaggers-directory"], config["endpoint-name-strategy"], config["endpoint-namespace"]);
+  const project = await readOpenApiProject(config["swaggers-directory"], config["endpoint-name-strategy"], config["endpoint-namespace"], config.serverUrlIndex);
   const modelsPath = config.output["api-models.ts"];
   const endpointsPath = config.output["api-endpoints.ts"];
   const clientPath = config.output["client.ts"];

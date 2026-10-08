@@ -24,6 +24,23 @@ npx swagger-client generate --config=swagger-client.json
 
 `client` can be `angular` or `react`.
 
+`serverUrlIndex` is optional and selects a zero-based index from each document's
+top-level `servers` array to prefix generated endpoint paths:
+
+```json
+{
+  "serverUrlIndex": 0
+}
+```
+
+For `servers: [{ "url": "/some-api/V01/xxx" }]`, the endpoint `/posts/{id}`
+gets the path `/some-api/V01/xxx/posts/{id}` in `api-endpoints.ts`. Relative
+server prefixes are appended to the client's configured `baseUrl` when making
+requests. Slashes at the join are normalized; an empty operation path uses the
+selected server URL exactly, without adding a trailing slash. Omitting this option keeps the
+original endpoint paths. Invalid indexes or missing, empty, or non-string
+selected URLs fail generation; URL errors identify the source file.
+
 `endpoint-name-strategy` is optional:
 
 - `operationId` uses the OpenAPI `operationId` as-is. This is the default.

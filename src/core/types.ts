@@ -13,6 +13,8 @@ export interface SwaggerClientConfig {
   "swaggers-directory": string;
   "endpoint-name-strategy"?: EndpointNameStrategy;
   "endpoint-namespace"?: EndpointNamespaceConfig;
+  /** Index of the document server URL to prefix endpoint paths with. */
+  serverUrlIndex?: number;
   output: {
     "api-models.ts": string;
     "api-endpoints.ts": string;
@@ -54,6 +56,7 @@ export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | 
 export interface OpenApiDocument {
   openapi?: string;
   swagger?: string;
+  servers?: { url: string }[];
   info?: {
     title?: string;
     version?: string;

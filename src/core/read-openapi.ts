@@ -18,6 +18,7 @@ import { schemaToType } from "./schema-to-typescript.js";
 import { ensureIdentifier, toPascalCase, uniqueName } from "./names.js";
 
 import { extractEndpointNamespace, validateEndpointNamespace } from "./endpoint-namespace.js";
+import { selectServerUrl, validateServerUrlIndex } from "./server-url.js";
 
 const HTTP_METHODS = new Set(["get", "post", "put", "patch", "delete", "head", "options"]);
 
@@ -27,14 +28,17 @@ const HTTP_METHODS = new Set(["get", "post", "put", "patch", "delete", "head", "
  * @param swaggerDirectory The directory containing one or more OpenAPI JSON files.
  * @param endpointNameStrategy The strategy used to name generated endpoint constants.
  * @param endpointNamespace Configurable document field and optional namespace extraction regex.
+ * @param serverUrlIndex Optional document server URL index to prefix endpoint paths with.
  * @returns The normalized schemas and endpoints discovered in the OpenAPI files.
  * @throws Error when a JSON file cannot be read or parsed.
  */
 export async function readOpenApiProject(
   swaggerDirectory: string,
   endpointNameStrategy: EndpointNameStrategy = "operationId",
-  endpointNamespace?: EndpointNamespaceConfig
+  endpointNamespace?: EndpointNamespaceConfig,
+  serverUrlIndex?: number
 ): Promise<ProjectModel> {
+  validateServerUrlIndex(serverUrlIndex, swaggerDirectory);
   if (endpointNameStrategy === "namespaceTagAndOperationId") {
     validateEndpointNamespace(endpointNamespace, swaggerDirectory);
   }
@@ -48,12 +52,13 @@ export async function readOpenApiProject(
   for (const file of files) {
     const document = JSON.parse(await readFile(file, "utf8")) as OpenApiDocument;
     const sourceFile = relative(swaggerDirectory, file);
+    const serverUrl = selectServerUrl(document, serverUrlIndex, sourceFile);
     const schemaNameMap = collectSchemas(document, schemas, usedSchemaNames);
 
     const namespace = endpointNameStrategy === "namespaceTagAndOperationId"
       ? extractEndpointNamespace(document, endpointNamespace!, sourceFile)
       : undefined;
-    endpoints.push(...collectEndpoints(document, sourceFile, schemaNameMap, usedEndpointNames, endpointNameStrategy, namespace));
+    endpoints.push(...collectEndpoints(document, sourceFile, schemaNameMap, usedEndpointNames, endpointNameStrategy, namespace, serverUrl));
   }
 
   return { schemas, endpoints };
@@ -110,7 +115,8 @@ function collectEndpoints(
   schemaNameMap: Map<string, string>,
   usedEndpointNames: Set<string>,
   endpointNameStrategy: EndpointNameStrategy,
-  namespace?: string
+  namespace?: string,
+  serverUrl = ""
 ): EndpointModel[] {
   const endpoints: EndpointModel[] = [];
 
@@ -131,7 +137,7 @@ function collectEndpoints(
       endpoints.push({
         name: endpointName,
         method: method.toUpperCase() as HttpMethod,
-        path,
+        path: serverUrl && path ? `${serverUrl.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}` : serverUrl || path,
         operationId,
         sourceFile,
         pathVariables: variablesFor(parameters, "path", schemaNameMap),

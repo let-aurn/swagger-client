@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { validateEndpointNamespace } from "./endpoint-namespace.js";
+import { validateServerUrlIndex } from "./server-url.js";
 import type { SwaggerClientConfig } from "./types.js";
 
 /**
@@ -29,6 +30,8 @@ export async function loadConfig(configPath: string): Promise<SwaggerClientConfi
 }
 
 function validateConfig(config: SwaggerClientConfig, configPath: string): void {
+  validateServerUrlIndex(config.serverUrlIndex, configPath);
+
   if (config.client !== "angular" && config.client !== "react") {
     throw new Error(`${configPath}: "client" must be "angular" or "react".`);
   }
