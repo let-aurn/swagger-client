@@ -73,7 +73,12 @@ error. This setting affects endpoint names only, not request URLs.
 
 ## Angular
 
+Use `provideSwaggerClient` to register the client as
+`EnvironmentProviders` without spreading a provider array:
+
 ```ts
+import { provideSwaggerClient } from './api/generated/swagger-client';
+
 bootstrapApplication(AppComponent, {
   providers: [
     provideHttpClient(),
@@ -83,6 +88,11 @@ bootstrapApplication(AppComponent, {
   ]
 });
 ```
+
+Starting with version `0.3.1`, `provideSwaggerClient(config)` returns
+`EnvironmentProviders` for application or route configuration. Remove any spread
+operator (`...`) when registering it. Version `0.3.0` retains the `Provider[]`
+implementation.
 
 ### Custom HTTP adapters
 

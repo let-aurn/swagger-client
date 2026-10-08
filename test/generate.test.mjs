@@ -29,7 +29,9 @@ test('generates Angular client files from OpenAPI JSON', async () => {
   assert.match(endpoints, /"page-size"\?: number/);
   assert.doesNotMatch(endpoints, /wireName/);
   assert.match(endpoints, /ApiModels\.PostResponse\[\]/);
-  assert.match(client, /provideSwaggerClient\(config: SwaggerClientConfig\)/);
+  assert.match(client, /provideSwaggerClient\(config: SwaggerClientConfig\): EnvironmentProviders/);
+  assert.match(client, /return makeEnvironmentProviders\(\[/);
+  assert.doesNotMatch(client, /provideSwaggerClientEnvironment/);
   assert.match(client, /httpClient\?: Type<SwaggerHttpClient>/);
 });
 
