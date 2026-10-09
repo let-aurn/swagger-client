@@ -10,7 +10,8 @@ export interface EndpointNamespaceConfig {
 
 export interface SwaggerClientConfig {
   client: ClientKind;
-  "swaggers-directory": string;
+  /** Directory, file glob, or include/exclude glob patterns, relative to the working directory. */
+  "swaggers-directory": string | string[];
   "endpoint-name-strategy"?: EndpointNameStrategy;
   "endpoint-namespace"?: EndpointNamespaceConfig;
   /** Index of the document server URL to prefix endpoint paths with. */

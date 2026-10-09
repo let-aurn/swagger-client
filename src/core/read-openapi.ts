@@ -1,5 +1,5 @@
-import { readdir, readFile } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { readFile } from "node:fs/promises";
+import { relative } from "node:path";
 import type {
   EndpointNameStrategy,
   EndpointNamespaceConfig,
@@ -19,13 +19,14 @@ import { ensureIdentifier, toPascalCase, uniqueName } from "./names.js";
 
 import { extractEndpointNamespace, validateEndpointNamespace } from "./endpoint-namespace.js";
 import { selectServerUrl, validateServerUrlIndex } from "./server-url.js";
+import { discoverSwaggerFiles } from "./swagger-files.js";
 
 const HTTP_METHODS = new Set(["get", "post", "put", "patch", "delete", "head", "options"]);
 
 /**
- * Reads OpenAPI JSON files from a directory and converts them to the generator project model.
+ * Reads selected OpenAPI JSON files and converts them to the generator project model.
  *
- * @param swaggerDirectory The directory containing one or more OpenAPI JSON files.
+ * @param swaggerDirectory A directory, glob, or array of include/exclude glob patterns.
  * @param endpointNameStrategy The strategy used to name generated endpoint constants.
  * @param endpointNamespace Configurable document field and optional namespace extraction regex.
  * @param serverUrlIndex Optional document server URL index to prefix endpoint paths with.
@@ -33,17 +34,17 @@ const HTTP_METHODS = new Set(["get", "post", "put", "patch", "delete", "head", "
  * @throws Error when a JSON file cannot be read or parsed.
  */
 export async function readOpenApiProject(
-  swaggerDirectory: string,
+  swaggerDirectory: string | string[],
   endpointNameStrategy: EndpointNameStrategy = "operationId",
   endpointNamespace?: EndpointNamespaceConfig,
   serverUrlIndex?: number
 ): Promise<ProjectModel> {
-  validateServerUrlIndex(serverUrlIndex, swaggerDirectory);
+  validateServerUrlIndex(serverUrlIndex, String(swaggerDirectory));
   if (endpointNameStrategy === "namespaceTagAndOperationId") {
-    validateEndpointNamespace(endpointNamespace, swaggerDirectory);
+    validateEndpointNamespace(endpointNamespace, String(swaggerDirectory));
   }
 
-  const files = await findJsonFiles(swaggerDirectory);
+  const { files, sourceDirectory } = await discoverSwaggerFiles(swaggerDirectory);
   const schemas: SchemaModel[] = [];
   const endpoints: EndpointModel[] = [];
   const usedSchemaNames = new Set<string>();
@@ -51,7 +52,7 @@ export async function readOpenApiProject(
 
   for (const file of files) {
     const document = JSON.parse(await readFile(file, "utf8")) as OpenApiDocument;
-    const sourceFile = relative(swaggerDirectory, file);
+    const sourceFile = relative(sourceDirectory, file);
     const serverUrl = selectServerUrl(document, serverUrlIndex, sourceFile);
     const schemaNameMap = collectSchemas(document, schemas, usedSchemaNames);
 
@@ -62,23 +63,6 @@ export async function readOpenApiProject(
   }
 
   return { schemas, endpoints };
-}
-
-async function findJsonFiles(directory: string): Promise<string[]> {
-  const entries = await readdir(directory, { withFileTypes: true });
-  const files: string[] = [];
-
-  for (const entry of entries) {
-    const path = join(directory, entry.name);
-
-    if (entry.isDirectory()) {
-      files.push(...await findJsonFiles(path));
-    } else if (entry.isFile() && entry.name.endsWith(".json")) {
-      files.push(path);
-    }
-  }
-
-  return files.sort();
 }
 
 function collectSchemas(

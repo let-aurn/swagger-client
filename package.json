@@ -1,6 +1,6 @@
 {
   "name": "@let-aurn/swagger-client",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "description": "Generate typed Angular and React clients from OpenAPI JSON files.",
   "type": "module",
   "bin": {
@@ -48,5 +48,8 @@
     "react": {
       "optional": true
     }
+  },
+  "dependencies": {
+    "tinyglobby": "^0.2.17"
   }
 }

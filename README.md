@@ -24,6 +24,37 @@ npx swagger-client generate --config=swagger-client.json
 
 `client` can be `angular` or `react`.
 
+`swaggers-directory` accepts a directory (all JSON files recursively), a file
+glob, or an array of include/exclude glob patterns. Paths are relative to the
+command's working directory; absolute paths also work. Use forward slashes in
+glob patterns. `*` matches within one directory and `**` matches across nested
+directories.
+
+To include only one subtree:
+
+```json
+{
+  "swaggers-directory": "swaggers/should-not-be-ignored/**/*.json"
+}
+```
+
+To include JSON files while excluding a subtree:
+
+```json
+{
+  "swaggers-directory": [
+    "swaggers/**/*.json",
+    "!swaggers/should-be-ignored/**"
+  ]
+}
+```
+
+Exclusions apply regardless of pattern order. Duplicate matches are processed
+once, in sorted file order; only `.json` files are read. Glob selections with
+no matching JSON files fail with an error. For glob or array selections,
+generated `sourceFile` metadata is relative to the working directory; a plain
+directory keeps metadata relative to that directory.
+
 `serverUrlIndex` is optional and selects a zero-based index from each document's
 top-level `servers` array to prefix generated endpoint paths:
 
