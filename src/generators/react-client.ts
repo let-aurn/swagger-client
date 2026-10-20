@@ -100,7 +100,7 @@ export function createSwaggerClient<TEndpoint extends AnyApiEndpoint>(
      * Sends a request using the configured fetch implementation.
      *
      * @param variables The endpoint path, query, header, and body values.
-     * @returns The parsed response body, or undefined for a 204 response.
+     * @returns The parsed response body, or undefined for an empty response or HEAD request.
      * @throws When a path variable is missing, the URL is invalid, fetching fails, the HTTP status is unsuccessful, or JSON parsing fails.
      */
     async request(variables?: SwaggerRequestVariables<TEndpoint>): Promise<ResponseOf<TEndpoint>> {
@@ -112,11 +112,12 @@ export function createSwaggerClient<TEndpoint extends AnyApiEndpoint>(
         throw new SwaggerHttpError(response);
       }
 
-      if (response.status === 204) {
+      if (response.status === 204 || endpoint.method === 'HEAD') {
         return undefined as ResponseOf<TEndpoint>;
       }
 
-      return await response.json() as ResponseOf<TEndpoint>;
+      const body = await response.text();
+      return (body === '' ? undefined : JSON.parse(body)) as ResponseOf<TEndpoint>;
     }
   };
 }
@@ -202,6 +203,10 @@ function stringifyRecord(record: Record<string, unknown> | undefined): Record<st
 }
 
 function joinUrl(baseUrl: string, path: string): string {
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+
   return baseUrl.replace(/\/+$/, '') + '/' + path.replace(/^\/+/, '');
 }
 `;

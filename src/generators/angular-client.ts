@@ -220,6 +220,10 @@ function stringifyRecord(record: Record<string, unknown> | undefined): Record<st
 }
 
 function joinUrl(baseUrl: string, path: string): string {
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+
   return baseUrl.replace(/\/+$/, '') + '/' + path.replace(/^\/+/, '');
 }
 `;

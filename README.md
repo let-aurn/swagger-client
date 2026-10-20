@@ -2,29 +2,57 @@
 
 Generate typed Angular and React clients from OpenAPI JSON files.
 
+Requires Node.js 20 or newer. Create a `swagger-client.json` configuration in your
+working directory, then run:
+
 ```sh
-npx swagger-client generate
-npx swagger-client generate --config=swagger-client.json
+npx @let-aurn/swagger-client generate
+npx @let-aurn/swagger-client generate --config=path/to/swagger-client.json
 ```
+
+Alternatively, install the generator as a development dependency and use its
+local executable:
+
+```sh
+npm install --save-dev @let-aurn/swagger-client
+npx swagger-client generate
+```
+
+Generation writes three TypeScript files: models, endpoint definitions, and the
+selected framework client. Install the runtime dependencies in the consuming
+application: `@angular/common`, `@angular/core`, and `rxjs` for Angular, or `react`
+for React.
 
 ## Config
 
 ```json
 {
-  "client": "angular",
-  "swaggers-directory": "path/to/swaggers",
-  "endpoint-name-strategy": "operationId",
-  "output": {
-    "api-models.ts": "src/app/api/generated/api-models.ts",
-    "api-endpoints.ts": "src/app/api/generated/api-endpoints.ts",
-    "client.ts": "src/app/api/generated/swagger-client.ts"
+  "input": "path/to/swaggers",
+  "api-models.ts": {
+    "output": "src/app/api/generated/api-models.ts"
+  },
+  "api-endpoints.ts": {
+    "output": "src/app/api/generated/api-endpoints.ts",
+    "naming": "operationId"
+  },
+  "swagger-client.ts": {
+    "output": "src/app/api/generated/swagger-client.ts",
+    "framework": "angular"
   }
 }
 ```
 
-`client` can be `angular` or `react`.
+`swagger-client.ts.framework` can be `angular` or `react`. Each generated file
+requires an `output` path. Imports between generated files are computed from
+these paths, so outputs can live in different directories.
 
-`swaggers-directory` accepts a directory (all JSON files recursively), a file
+Examples showing only part of a configuration must be combined with the required
+input and output sections. Paths, including paths in a custom config file, are
+resolved relative to the command's working directory.
+
+### Input files
+
+`input` accepts a directory (all JSON files recursively), a file
 glob, or an array of include/exclude glob patterns. Paths are relative to the
 command's working directory; absolute paths also work. Use forward slashes in
 glob patterns. `*` matches within one directory and `**` matches across nested
@@ -34,7 +62,7 @@ To include only one subtree:
 
 ```json
 {
-  "swaggers-directory": "swaggers/should-not-be-ignored/**/*.json"
+  "input": "swaggers/should-not-be-ignored/**/*.json"
 }
 ```
 
@@ -42,7 +70,7 @@ To include JSON files while excluding a subtree:
 
 ```json
 {
-  "swaggers-directory": [
+  "input": [
     "swaggers/**/*.json",
     "!swaggers/should-be-ignored/**"
   ]
@@ -55,30 +83,44 @@ no matching JSON files fail with an error. For glob or array selections,
 generated `sourceFile` metadata is relative to the working directory; a plain
 directory keeps metadata relative to that directory.
 
-`serverUrlIndex` is optional and selects a zero-based index from each document's
+### Server URLs
+
+`api-endpoints.ts.serverIndex` is optional and selects a zero-based index from each document's
 top-level `servers` array to prefix generated endpoint paths:
 
 ```json
 {
-  "serverUrlIndex": 0
+  "api-endpoints.ts": {
+    "output": "generated/api-endpoints.ts",
+    "serverIndex": 0
+  }
 }
 ```
 
 For `servers: [{ "url": "/some-api/V01/xxx" }]`, the endpoint `/posts/{id}`
 gets the path `/some-api/V01/xxx/posts/{id}` in `api-endpoints.ts`. Relative
 server prefixes are appended to the client's configured `baseUrl` when making
-requests. Slashes at the join are normalized; an empty operation path uses the
+requests, preserving any path already in `baseUrl`. Absolute HTTP(S) server
+URLs are used directly by both clients, overriding `baseUrl` for that endpoint.
+For example, `https://api.example.com/v1` with `/posts` sends requests to
+`https://api.example.com/v1/posts`.
+
+Slashes at the join are normalized; an empty operation path uses the
 selected server URL exactly, without adding a trailing slash. Omitting this option keeps the
 original endpoint paths. Invalid indexes or missing, empty, or non-string
 selected URLs fail generation; URL errors identify the source file.
 
-`endpoint-name-strategy` is optional:
+### Endpoint naming and namespaces
 
-- `operationId` uses the OpenAPI `operationId` as-is. This is the default.
-- `tagAndOperationId` prefixes endpoint exports with the first OpenAPI tag, unless the `operationId` already starts with that tag.
-- `namespaceTagAndOperationId` adds a document namespace before the tag and operation ID. Requires `endpoint-namespace`.
+`api-endpoints.ts.naming` is optional:
 
-With `tagAndOperationId`, an operation tagged `SomeController` with `operationId: "someEndpoint"` is generated as:
+- `operationId` uses the operation ID, normalized to a TypeScript identifier. This is the default.
+- `tag_operationId` prefixes the operation ID with the first OpenAPI tag.
+- `namespace_operationId` prefixes the operation ID with the document namespace.
+- `namespace_tag_operationId` prefixes the operation ID with the document namespace and first tag.
+
+The two namespace naming formats require a top-level `namespace` resolver.
+With `tag_operationId`, an operation tagged `SomeController` with `operationId: "someEndpoint"` is generated as:
 
 ```ts
 ApiEndpoints.SomeController_someEndpoint
@@ -88,8 +130,11 @@ To include a namespace, configure where it comes from in each Swagger document:
 
 ```json
 {
-  "endpoint-name-strategy": "namespaceTagAndOperationId",
-  "endpoint-namespace": {
+  "api-endpoints.ts": {
+    "output": "generated/api-endpoints.ts",
+    "naming": "namespace_tag_operationId"
+  },
+  "namespace": {
     "pointer": "/servers/0/url",
     "pattern": "^/([^/]+)"
   }
@@ -117,7 +162,61 @@ prefixes followed by `_` are not repeated. Name collisions receive numeric suffi
 
 Extraction runs separately for each Swagger file. Missing or non-string fields,
 unmatched patterns, and empty namespaces fail generation with a file-specific
-error. This setting affects endpoint names only, not request URLs.
+error. The namespace resolver does not change request URLs.
+
+### Models, enums, and merging
+
+The `api-models.ts` section also accepts:
+
+- `enumStyle`: `"union"` (default) emits literal unions; `"enum"` emits named runtime enums.
+- `mergeDeclarations`: `false` by default. When `true`, equivalent schemas with the same original name share a declaration within each namespace. Without a namespace, merging applies across all selected documents. Schemas with different structures remain separate.
+- `prefix`: a literal prefix applied to every model and named enum declaration. It defaults to an empty string. `${namespace}` substitutes the resolved document namespace and requires a namespace resolver. For example, `"${namespace}_"` produces names such as `Billing_PostResponse`.
+
+```json
+{
+  "input": "swaggers/**/*.json",
+  "namespace": {
+    "pointer": "/info/x-namespace"
+  },
+  "api-models.ts": {
+    "output": "generated/api-models.ts",
+    "enumStyle": "enum",
+    "mergeDeclarations": true,
+    "prefix": "${namespace}_"
+  },
+  "api-endpoints.ts": {
+    "output": "generated/api-endpoints.ts",
+    "naming": "namespace_tag_operationId"
+  },
+  "swagger-client.ts": {
+    "output": "generated/swagger-client.ts",
+    "framework": "react"
+  }
+}
+```
+
+### Legacy configuration
+
+The older flat format remains supported. Use one format per configuration;
+mixing grouped and legacy keys fails validation.
+
+| Legacy setting | Grouped setting |
+| --- | --- |
+| `swaggers-directory` | `input` |
+| `client` | `swagger-client.ts.framework` |
+| `output["api-models.ts"]` | `api-models.ts.output` |
+| `output["api-endpoints.ts"]` | `api-endpoints.ts.output` |
+| `output["client.ts"]` | `swagger-client.ts.output` |
+| `endpoint-namespace` | `namespace` |
+| `endpoint-name-strategy` | `api-endpoints.ts.naming` |
+| `serverUrlIndex` | `api-endpoints.ts.serverIndex` |
+| `enum-style` | `api-models.ts.enumStyle` |
+| `mergeDeclarations` | `api-models.ts.mergeDeclarations` |
+
+For naming, legacy `tagAndOperationId` becomes `tag_operationId`, and
+`namespaceTagAndOperationId` becomes `namespace_tag_operationId`.
+`operationId` is unchanged. Declaration prefixes and `namespace_operationId`
+naming are available in the grouped format only.
 
 ## Angular
 
@@ -180,8 +279,27 @@ provideSwaggerClient({
 
 ## React
 
+Call `useSwaggerClient` inside a React component or custom hook:
+
 ```ts
-const client = useSwaggerClient(ApiEndpoints.PostsController_getPost, {
+import { ApiEndpoints } from './api/generated/api-endpoints';
+import { useSwaggerClient } from './api/generated/swagger-client';
+
+export function usePostClient() {
+  return useSwaggerClient(ApiEndpoints.PostsController_getPost, {
+    baseUrl: 'https://api.example.com'
+  });
+}
+```
+
+For imperative use, call `createSwaggerClient` with the same endpoint and
+configuration:
+
+```ts
+import { ApiEndpoints } from './api/generated/api-endpoints';
+import { createSwaggerClient } from './api/generated/swagger-client';
+
+const client = createSwaggerClient(ApiEndpoints.PostsController_getPost, {
   baseUrl: 'https://api.example.com'
 });
 
@@ -189,3 +307,26 @@ const post = await client.request({
   pathVariables: { id: 123 }
 });
 ```
+
+Successful responses with a body are parsed as JSON. Empty successful responses
+(including HTTP 200, 201, 204, and 205) and HEAD requests resolve to `undefined`.
+Nonempty malformed JSON rejects with a parsing error. HTTP failures reject with
+`SwaggerHttpError`, whose `response` property contains the original Fetch response.
+
+## Local development
+
+```sh
+npm ci
+npm test
+node dist/cli/index.js generate
+npm pack --dry-run
+```
+
+`npm test` builds the generator and runs the tests, including compilation and
+runtime checks of generated clients. The default configuration reads
+`test/fixtures` and writes examples to `generated/`. `npm pack` builds `dist/`
+through the `prepack` script.
+
+Dependencies, build output, generated examples, and temporary test files are
+ignored by Git and can be recreated from the tracked source, lockfile, and
+fixtures.
