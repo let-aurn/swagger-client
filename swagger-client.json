@@ -1,0 +1,13 @@
+{
+  "input": "test/fixtures",
+  "api-models.ts": {
+    "output": "generated/api-models.ts"
+  },
+  "api-endpoints.ts": {
+    "output": "generated/api-endpoints.ts"
+  },
+  "swagger-client.ts": {
+    "output": "generated/swagger-client.ts",
+    "framework": "angular"
+  }
+}

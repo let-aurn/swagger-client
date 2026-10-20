@@ -1,0 +1,23 @@
+# Dependencies and generated files
+node_modules/
+/dist/
+/generated/
+/test/tmp/
+coverage/
+.nyc_output/
+*.tsbuildinfo
+
+# Local editor and operating system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Logs and package archives
+*.log
+*.tgz
+
+# Local environment settings
+.env
+.env.*
+!.env.example

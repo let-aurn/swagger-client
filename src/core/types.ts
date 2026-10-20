@@ -1,0 +1,163 @@
+export type ClientKind = "angular" | "react";
+export type EnumStyle = "union" | "enum";
+export type EndpointNameStrategy = "operationId" | "tagAndOperationId" | "namespaceTagAndOperationId";
+export type EndpointNaming = "operationId" | "tag_operationId" | "namespace_operationId" | "namespace_tag_operationId";
+
+export interface EndpointNamespaceConfig {
+  /** JSON Pointer to a string in each OpenAPI document. */
+  pointer: string;
+  /** Optional regex: uses the first capture group, or the full match if none exists. */
+  pattern?: string;
+}
+
+export type SwaggerClientConfig = GroupedSwaggerClientConfig | LegacySwaggerClientConfig;
+
+export interface GenerationResult {
+  endpointCount: number;
+  client: ClientKind;
+  /** Model and named enum declarations emitted in api-models.ts, after merging. */
+  typeCount: number;
+  /** Absolute paths of the generated files. */
+  modelsPath: string;
+  endpointsPath: string;
+  clientPath: string;
+}
+
+export interface GroupedSwaggerClientConfig {
+  input: string | string[];
+  namespace?: EndpointNamespaceConfig;
+  "api-models.ts": {
+    output: string;
+    mergeDeclarations?: boolean;
+    /** Literal prefix, optionally containing ${namespace}. Applied to every declaration. */
+    prefix?: string;
+    enumStyle?: EnumStyle;
+  };
+  "api-endpoints.ts": {
+    output: string;
+    naming?: EndpointNaming;
+    serverIndex?: number;
+  };
+  "swagger-client.ts": {
+    output: string;
+    framework: ClientKind;
+  };
+}
+
+/** @deprecated Use the configuration grouped by generated file instead. */
+export interface LegacySwaggerClientConfig {
+  client: ClientKind;
+  /** Emit literal unions by default, or named runtime enums. */
+  "enum-style"?: EnumStyle;
+  /** Directory, file glob, or include/exclude glob patterns, relative to the working directory. */
+  "swaggers-directory": string | string[];
+  "endpoint-name-strategy"?: EndpointNameStrategy;
+  "endpoint-namespace"?: EndpointNamespaceConfig;
+  /** Reuse equivalent, same-named schemas within each resolved namespace. Defaults to false. */
+  mergeDeclarations?: boolean;
+  /** Index of the document server URL to prefix endpoint paths with. */
+  serverUrlIndex?: number;
+  output: {
+    "api-models.ts": string;
+    "api-endpoints.ts": string;
+    "client.ts": string;
+  };
+}
+
+export interface ReadOpenApiOptions {
+  namespace?: EndpointNamespaceConfig;
+  naming?: EndpointNaming;
+  serverIndex?: number;
+  enumStyle?: EnumStyle;
+  mergeDeclarations?: boolean;
+  prefix?: string;
+}
+
+export interface ProjectModel {
+  schemas: SchemaModel[];
+  endpoints: EndpointModel[];
+}
+
+export interface SchemaModel {
+  name: string;
+  schema: OpenApiSchema;
+  enumValues?: (string | number)[];
+}
+
+export interface EndpointModel {
+  name: string;
+  method: HttpMethod;
+  path: string;
+  operationId: string;
+  sourceFile: string;
+  deprecated?: boolean;
+  description?: string;
+  pathVariables: VariableModel[];
+  queryVariables: VariableModel[];
+  headerVariables: VariableModel[];
+  bodyType: string | null;
+  responseType: string;
+}
+
+export interface VariableModel {
+  name: string;
+  type: string;
+  required: boolean;
+}
+
+export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS";
+
+export interface OpenApiDocument {
+  openapi?: string;
+  swagger?: string;
+  servers?: { url: string }[];
+  info?: {
+    title?: string;
+    version?: string;
+  };
+  paths?: Record<string, Record<string, OpenApiOperation | unknown>>;
+  components?: {
+    schemas?: Record<string, OpenApiSchema>;
+  };
+  definitions?: Record<string, OpenApiSchema>;
+}
+
+export interface OpenApiOperation {
+  operationId?: string;
+  deprecated?: boolean;
+  description?: string;
+  tags?: string[];
+  parameters?: OpenApiParameter[];
+  requestBody?: {
+    required?: boolean;
+    content?: Record<string, { schema?: OpenApiSchema }>;
+  };
+  responses?: Record<string, OpenApiResponse>;
+}
+
+export interface OpenApiParameter {
+  name: string;
+  in: "path" | "query" | "header" | "cookie";
+  required?: boolean;
+  schema?: OpenApiSchema;
+}
+
+export interface OpenApiResponse {
+  description?: string;
+  content?: Record<string, { schema?: OpenApiSchema }>;
+}
+
+export interface OpenApiSchema {
+  $ref?: string;
+  type?: string;
+  format?: string;
+  enum?: unknown[];
+  nullable?: boolean;
+  required?: string[];
+  properties?: Record<string, OpenApiSchema>;
+  items?: OpenApiSchema;
+  additionalProperties?: boolean | OpenApiSchema;
+  allOf?: OpenApiSchema[];
+  oneOf?: OpenApiSchema[];
+  anyOf?: OpenApiSchema[];
+}
