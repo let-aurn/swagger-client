@@ -1,3 +1,5 @@
+import { transpileModule, ModuleKind, ScriptTarget } from "typescript-transpiler";
+import { emitFetchClient } from "../generators/fetch-client.js";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 import type { GenerationResult, SwaggerClientConfig } from "./types.js";
@@ -33,16 +35,17 @@ export async function generate(config: SwaggerClientConfig): Promise<GenerationR
   const clientPath = grouped ? config["swagger-client.ts"].output : config.output["client.ts"];
   const framework = grouped ? config["swagger-client.ts"].framework : config.client;
 
-  await writeGeneratedFile(modelsPath, emitModels(project));
-  await writeGeneratedFile(endpointsPath, emitEndpoints(project, {
+  const javascript = grouped && config.language === "javascript";
+  const emit = async (path: string, content: string) => writeGeneratedFile(path, javascript
+    ? transpileModule(content, { compilerOptions: { module: ModuleKind.ES2022, target: ScriptTarget.ES2022 } }).outputText
+    : content);
+  await emit(modelsPath, emitModels(project));
+  await emit(endpointsPath, emitEndpoints(project, {
     modelsImportPath: toTypeScriptImportPath(endpointsPath, modelsPath)
   }));
-  await writeGeneratedFile(
-    clientPath,
-    framework === "angular"
-      ? emitAngularClient({ endpointsImportPath: toTypeScriptImportPath(clientPath, endpointsPath) })
-      : emitReactClient({ endpointsImportPath: toTypeScriptImportPath(clientPath, endpointsPath) })
-  );
+  const options = { endpointsImportPath: toTypeScriptImportPath(clientPath, endpointsPath) };
+  await emit(clientPath, framework === "angular" ? emitAngularClient(options)
+    : framework === "react" ? emitReactClient(options) : emitFetchClient(options));
   return {
     endpointCount: project.endpoints.length,
     client: framework,

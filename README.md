@@ -1,6 +1,6 @@
 # Swagger Client
 
-Generate typed Angular and React clients from OpenAPI JSON files.
+Generate Angular, React, and framework-free Fetch clients from OpenAPI JSON files.
 
 Requires Node.js 20 or newer. Create a `swagger-client.json` configuration in your
 working directory, then run:
@@ -42,7 +42,7 @@ for React.
 }
 ```
 
-`swagger-client.ts.framework` can be `angular` or `react`. Each generated file
+`swagger-client.ts.framework` can be `angular`, `react`, or `fetch`. Each generated file
 requires an `output` path. Imports between generated files are computed from
 these paths, so outputs can live in different directories.
 
@@ -217,6 +217,45 @@ For naming, legacy `tagAndOperationId` becomes `tag_operationId`, and
 `namespaceTagAndOperationId` becomes `namespace_tag_operationId`.
 `operationId` is unchanged. Declaration prefixes and `namespace_operationId`
 naming are available in the grouped format only.
+
+## Plain JavaScript and framework-free Fetch
+
+Set `framework` to `"fetch"` for a standalone client with no Angular, React, or
+RxJS dependency. TypeScript output is the default. For plain JavaScript ES
+modules, set top-level `language` to `"javascript"` and use `.js` output paths:
+
+```json
+{
+  "input": "swaggers/**/*.json",
+  "language": "javascript",
+  "api-models.ts": { "output": "generated/api-models.js" },
+  "api-endpoints.ts": { "output": "generated/api-endpoints.js" },
+  "swagger-client.ts": {
+    "output": "generated/swagger-client.js",
+    "framework": "fetch"
+  }
+}
+```
+
+The section names stay the same for compatibility. JavaScript output is available
+only for the Fetch client in grouped configuration. Type-only models disappear;
+named runtime enums remain when `enumStyle` is `"enum"`. JavaScript output does
+not include TypeScript declarations. Generated modules work in modern browsers
+with `<script type="module">`, or Node.js with `"type": "module"`.
+
+```js
+import { ApiEndpoints } from './generated/api-endpoints.js';
+import { createSwaggerClient } from './generated/swagger-client.js';
+
+const client = createSwaggerClient(ApiEndpoints.PostsController_getPost, {
+  baseUrl: 'https://api.example.com'
+});
+const post = await client.request({ pathVariables: { id: 123 } });
+```
+
+The Fetch client supports the same request options, custom `fetch`, response
+parsing, and `SwaggerHttpError` behavior as the React client. The generated
+JavaScript client needs only the standard Fetch API at runtime.
 
 ## Angular
 

@@ -1,4 +1,4 @@
-export type ClientKind = "angular" | "react";
+export type ClientKind = "angular" | "react" | "fetch";
 export type EnumStyle = "union" | "enum";
 export type EndpointNameStrategy = "operationId" | "tagAndOperationId" | "namespaceTagAndOperationId";
 export type EndpointNaming = "operationId" | "tag_operationId" | "namespace_operationId" | "namespace_tag_operationId";
@@ -25,6 +25,8 @@ export interface GenerationResult {
 
 export interface GroupedSwaggerClientConfig {
   input: string | string[];
+  /** JavaScript ES modules are available for the Fetch client. Defaults to typescript. */
+  language?: "typescript" | "javascript";
   namespace?: EndpointNamespaceConfig;
   "api-models.ts": {
     output: string;
