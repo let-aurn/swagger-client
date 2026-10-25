@@ -72,8 +72,8 @@ export function validateConfig(config: SwaggerClientConfig, configPath: string):
   validateMergeDeclarations(config.mergeDeclarations, configPath);
   validateServerUrlIndex(config.serverUrlIndex, configPath);
 
-  if (config.client !== "angular" && config.client !== "react") {
-    throw new Error(`${configPath}: "client" must be "angular" or "react".`);
+  if (config.client !== "angular" && config.client !== "react" && config.client !== "fetch") {
+    throw new Error(`${configPath}: "client" must be "angular", "react", or "fetch".`);
   }
 
   validateSwaggerInput(config["swaggers-directory"], configPath);
@@ -103,12 +103,23 @@ function validateGroupedConfig(config: GroupedSwaggerClientConfig, source: strin
   if (legacyKeys.some(key => Object.hasOwn(config, key))) {
     throw new Error(`${source}: cannot mix legacy configuration keys with the grouped configuration.`);
   }
-  assertKeys(config, ["input", "namespace", "api-models.ts", "api-endpoints.ts", "swagger-client.ts"], source);
+  assertKeys(config, ["input", "language", "namespace", "api-models.ts", "api-endpoints.ts", "swagger-client.ts"], source);
   validateSwaggerInput(config.input, `${source}: input`);
   for (const key of ["api-models.ts", "api-endpoints.ts", "swagger-client.ts"] as const) {
     const section = config[key];
     if (!section || typeof section !== "object" || Array.isArray(section) || typeof section.output !== "string" || !section.output.trim()) {
       throw new Error(`${source}: "${key}.output" must be a non-empty path string.`);
+    }
+  }
+  if (config.language !== undefined && !["typescript", "javascript"].includes(config.language)) {
+    throw new Error(`${source}: "language" must be "typescript" or "javascript".`);
+  }
+  if (config.language === "javascript") {
+    if (config["swagger-client.ts"].framework !== "fetch") {
+      throw new Error(`${source}: JavaScript output requires the Fetch framework.`);
+    }
+    for (const key of ["api-models.ts", "api-endpoints.ts", "swagger-client.ts"] as const) {
+      if (!config[key].output.endsWith(".js")) throw new Error(`${source}: JavaScript output paths must end in .js.`);
     }
   }
   const models = config["api-models.ts"];
@@ -127,8 +138,8 @@ function validateGroupedConfig(config: GroupedSwaggerClientConfig, source: strin
   if (config.namespace !== undefined || endpoints.naming?.startsWith("namespace_")) {
     validateEndpointNamespace(config.namespace, `${source}: namespace`);
   }
-  if (client.framework !== "angular" && client.framework !== "react") {
-    throw new Error(`${source}: "swagger-client.ts.framework" must be "angular" or "react".`);
+  if (client.framework !== "angular" && client.framework !== "react" && client.framework !== "fetch") {
+    throw new Error(`${source}: "swagger-client.ts.framework" must be "angular", "react", or "fetch".`);
   }
 }
 

@@ -1,7 +1,7 @@
 {
   "name": "@let-aurn/swagger-client",
   "version": "0.7.3",
-  "description": "Generate typed Angular and React clients from OpenAPI JSON files.",
+  "description": "Generate Angular, React, and framework-free Fetch clients from OpenAPI JSON files.",
   "type": "module",
   "bin": {
     "swagger-client": "dist/cli/index.js"
@@ -51,6 +51,7 @@
     }
   },
   "dependencies": {
-    "tinyglobby": "^0.2.17"
+    "tinyglobby": "^0.2.17",
+    "typescript-transpiler": "npm:typescript@^5.9.3"
   }
 }

@@ -39,7 +39,7 @@ declare module '@angular/common/http' {
   export class HttpParams { append(key: string, value: string): HttpParams; set(key: string, value: string): HttpParams; }
 }
 `);
-  for (const framework of ['angular', 'react']) {
+  for (const framework of ['angular', 'react', 'fetch']) {
     const directory = `${root}/${framework}`;
     await generate({
       input: resolve('test/fixtures/posts.json'),
@@ -75,7 +75,7 @@ declare module '@angular/common/http' {
 
 });
 
-for (const framework of ['angular', 'react']) {
+for (const framework of ['angular', 'react', 'fetch']) {
   test(`${framework} preserves absolute URLs and joins relative paths while encoding variables`, async () => {
     const cases = [
       ['https://api.example/v1/posts/{id}', 'https://api.example/v1/posts/a%20b'],
@@ -98,7 +98,7 @@ for (const framework of ['angular', 'react']) {
         assert.equal(new URL(request.url).href, expected);
         assert.equal(request.query.page, 1);
       } else {
-        await clients.react.createSwaggerClient(endpoint, {
+        await clients[framework].createSwaggerClient(endpoint, {
           baseUrl: 'https://gateway.example/base///',
           fetch: async (url, init) => {
             request = { url, ...init };
