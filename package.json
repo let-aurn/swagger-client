@@ -52,5 +52,13 @@
   },
   "dependencies": {
     "tinyglobby": "^0.2.17"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/let-aurn/swagger-client.git"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   }
 }
