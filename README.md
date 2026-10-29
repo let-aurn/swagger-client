@@ -244,15 +244,18 @@ implementation.
 ### Custom HTTP adapters
 
 Implement `SwaggerHttpClient` and pass the adapter class to `provideSwaggerClient`.
-The adapter receives `{ method, url, headers, query, body }` and returns an
-`Observable<T>` of the response body. For a transport returning `Promise<{ data: unknown }>`:
+The adapter receives `{ method, url, headers, query, body, context }` and returns
+`Observable<SwaggerHttpResponse<T>>`. Select the transport only here; application
+request policy can keep using the injected `SwaggerClientService`.
+
+For example, this generic native transport returns `{ code, body }`. It must reject
+failed HTTP requests, or the client will reject returned non-2xx responses itself:
 
 ```ts
 import { Injectable } from '@angular/core';
 import { defer, map, Observable } from 'rxjs';
 import type {
-  SwaggerHttpClient,
-  SwaggerHttpRequest
+  SwaggerHttpClient, SwaggerHttpRequest, SwaggerHttpResponse
 } from './api/generated/swagger-client';
 import { NativeTransport } from './native-transport';
 
@@ -260,13 +263,26 @@ import { NativeTransport } from './native-transport';
 export class MySwaggerHttpClient implements SwaggerHttpClient {
   constructor(private readonly transport: NativeTransport) {}
 
-  request<T>(request: SwaggerHttpRequest): Observable<T> {
+  request<T>(request: SwaggerHttpRequest): Observable<SwaggerHttpResponse<T>> {
     return defer(() => this.transport.request(request)).pipe(
-      map(response => response.data as T)
+      map(response => ({
+        status: response.code, // actual native status, never a default 200
+        body: request.method === 'HEAD' || response.code === 204 || response.code === 205
+          ? null : (response.body ?? null) as T | null,
+        headers: null, // this transport does not expose received headers
+        url: null // final response URL is unavailable
+      }))
     );
   }
 }
 ```
+
+The native transport remains application code: it handles query encoding and body
+serialization and receives `context` unchanged. The library has no Capacitor,
+platform detection, session recovery, caching, logging, authentication, or retry
+policy. A promise-based native transport cannot necessarily cancel a native
+operation on unsubscription; cancellation depends on the adapter. Angular's
+default adapter retains HttpClient interceptors and cancellation.
 
 Register the adapter class through `provideSwaggerClient`:
 
@@ -276,6 +292,101 @@ provideSwaggerClient({
   httpClient: MySwaggerHttpClient
 });
 ```
+
+### Responses and preparation (Angular and React)
+
+Both generated clients export `SwaggerHttpResponse<T>`:
+
+```ts
+interface SwaggerHttpResponse<T> {
+  status: number;
+  body: T | null;
+  headers: Readonly<Record<string, readonly string[]>> | null;
+  url: string | null;
+  empty?: boolean;
+}
+```
+
+`status` is the actual HTTP status; an adapter unable to obtain it must fail rather
+than invent a value. Response header names are lowercase. Arrays retain every
+value exposed by the transport. Angular uses `HttpHeaders.getAll()`. Fetch combines
+most repeated values into one string, which is retained without guessing how to
+split it; separately exposed `getSetCookie()` values are preserved where available.
+Browser/CORS restrictions can hide headers. `{}` means none were exposed;
+`null` means header metadata was unavailable. Custom adapters must follow the same
+lowercase-name and repeated-value convention. `url` is the final response URL when
+exposed, otherwise `null`; it is never fabricated from the request URL.
+
+The full-response body is nullable, including JSON `null`, empty responses, HEAD,
+204 and 205. Adapters normalize absent bodies to `null` and may set `empty: true`
+when they know no body was received. HEAD, 204 and 205 are normalized by the client
+as well. The optional `empty` flag lets React preserve its legacy distinction
+between an empty response (`undefined` in body mode) and JSON `null` (`null`).
+Custom React adapters should set it for empty 200/201/202 responses too. Angular
+body mode retains HttpClient's `null` for empty bodies. Existing body-mode types
+remain `ResponseOf<typeof endpoint>` for compatibility, even where an empty
+response yields null/undefined at runtime. Use full-response mode for an explicit
+nullable-body type.
+
+For an injected Angular client:
+
+```ts
+const variables = { pathVariables: { id: 123 } };
+const body$ = client.request(ApiEndpoints.PostsController_getPost, variables);
+const response$ = client.request(ApiEndpoints.PostsController_getPost, variables, {
+  observe: 'response',
+  headers: { 'X-Request-Id': 'example' },
+  context: new HttpContext().set(MY_APPLICATION_TOKEN, true)
+});
+// Observable<SwaggerHttpResponse<ResponseOf<typeof ApiEndpoints.PostsController_getPost>>>
+
+const prepared = client.prepare(ApiEndpoints.PostsController_getPost, variables, {
+  headers: { 'X-Request-Id': 'example' },
+  context: new HttpContext().set(MY_APPLICATION_TOKEN, true)
+});
+prepared.request;        // method, URL, headers, query, body and context; no execution
+prepared.send();         // cold Observable of the body
+prepared.sendResponse(); // cold Observable of the full response
+```
+
+`request()` and `prepare()` share request construction. The snapshot contains
+resolved path parameters; query parameters are retained separately for the adapter
+to encode. Caller headers override endpoint `headerVariables`, case-insensitively.
+React additionally supports configuration headers with the lowest precedence.
+Request header names are normalized to lowercase. Only the default React Fetch
+adapter adds `content-type: application/json` when serializing a body, unless set
+by the caller.
+
+Preparation copies headers, query data and body data. Changing the original
+variables or the exposed inspection snapshot does not change later executions.
+Each execution receives another copy, so adapter mutations cannot leak into
+another execution. JSON data and structured-cloneable body values are supported;
+Angular also preserves FormData, URLSearchParams and immutable HttpParams bodies.
+`HttpContext` and React's `AbortSignal` retain their identity and are intentionally
+shared with the caller. Concurrent requests have their own response metadata.
+
+Preparing does no transport work. Every Angular execution subscription calls the
+configured adapter exactly once, even when subscribing repeatedly to the same
+observable. There is no automatic subscription, retry or response cache. Errors
+from HttpClient/custom adapters pass through the error channel unchanged. Returned
+non-2xx responses from custom adapters become `SwaggerHttpError`; adapters should
+normally emit their own native errors. No second client or platform selection is
+needed by application request infrastructure.
+
+### Migrating to 0.8.0
+
+This is a **breaking change for existing Angular custom adapters**: change
+`request<T>(): Observable<T>` to
+`request<T>(): Observable<SwaggerHttpResponse<T>>`, preserving the actual status,
+nullable body, exposed headers and final URL. Do not add body extraction to each
+adapter: the generated client performs it centrally. Use `null` for unavailable
+headers or URL. Regenerate your client and migrate every custom adapter together.
+Existing body-only application calls remain valid; the adapter change is not
+fully backward compatible. Version 0.8.0 is the next breaking minor in the current
+pre-1.0 version series. Angular consumers now require RxJS 7 or later.
+For React custom adapters, `SwaggerHttpError.response` can contain either the
+original Fetch `Response` or a `SwaggerHttpResponse<unknown>`; narrow that union
+before using Fetch-specific methods such as `text()`.
 
 ## React
 
@@ -312,6 +423,43 @@ Successful responses with a body are parsed as JSON. Empty successful responses
 (including HTTP 200, 201, 204, and 205) and HEAD requests resolve to `undefined`.
 Nonempty malformed JSON rejects with a parsing error. HTTP failures reject with
 `SwaggerHttpError`, whose `response` property contains the original Fetch response.
+
+React supports the same response and preparation options on its existing endpoint
+client; execution returns promises and begins when `send()` or `sendResponse()`
+is called (promises do not have subscriptions):
+
+```ts
+const response = await client.request({ pathVariables: { id: 123 } }, {
+  observe: 'response', headers: { 'X-Request-Id': 'example' }
+});
+const controller = new AbortController();
+const prepared = client.prepare({ pathVariables: { id: 123 } }, {
+  signal: controller.signal
+});
+prepared.request; // inspection only; no fetch yet
+const pending = prepared.sendResponse(); // one fetch
+controller.abort(); // cancellation forwarded to Fetch
+```
+
+For the same endpoint-based call shape as Angular, React also exports
+`SwaggerClientService`:
+
+```ts
+const service = new SwaggerClientService({ baseUrl: 'https://api.example.com' });
+const prepared = service.prepare(ApiEndpoints.PostsController_getPost, {
+  pathVariables: { id: 123 }
+});
+const response = await prepared.sendResponse();
+```
+
+React selects its adapter once in configuration: `httpClient` takes precedence
+over `fetch`; otherwise `FetchSwaggerHttpClient` uses the configured `fetch` or
+global Fetch. A custom React adapter implements
+`request<T>(request: SwaggerHttpRequest): Promise<SwaggerHttpResponse<T>>` and
+receives runtime headers and `signal` unchanged. Existing `fetch` configuration
+and `useSwaggerClient`/`createSwaggerClient` calls continue to work. Fetch errors
+and abort errors reject unchanged. Unsuccessful Fetch responses still reject
+with `SwaggerHttpError` containing the original `Response`.
 
 ## Local development
 

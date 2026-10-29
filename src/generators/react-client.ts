@@ -19,6 +19,7 @@ import type {
   AnyApiEndpoint,
   BodyVariablesOf,
   HeaderVariablesOf,
+  HttpMethod,
   PathVariablesOf,
   QueryVariablesOf,
   ResponseOf
@@ -30,7 +31,74 @@ import type {
 export interface SwaggerClientConfig {
   baseUrl: string;
   fetch?: typeof globalThis.fetch;
+  httpClient?: SwaggerHttpClient;
   headers?: Record<string, string>;
+}
+
+/** Header names are lowercase. null means metadata was unavailable. */
+export interface SwaggerHttpResponse<T> {
+  status: number;
+  body: T | null;
+  /** True only when the transport knows the response had no body. */
+  empty?: boolean;
+  headers: Readonly<Record<string, readonly string[]>> | null;
+  url: string | null;
+}
+
+export interface SwaggerHttpRequest {
+  method: HttpMethod;
+  url: string;
+  headers?: Record<string, string>;
+  query?: Record<string, unknown>;
+  body?: unknown;
+  signal?: AbortSignal;
+}
+
+export interface SwaggerHttpClient {
+  request<T>(request: SwaggerHttpRequest): Promise<SwaggerHttpResponse<T>>;
+}
+
+export interface SwaggerRequestOptions {
+  headers?: Record<string, string>;
+  signal?: AbortSignal;
+  observe?: 'body' | 'response';
+}
+
+export interface SwaggerPreparedRequest<T> {
+  readonly request: SwaggerHttpRequest;
+  send(): Promise<T>;
+  sendResponse(): Promise<SwaggerHttpResponse<T>>;
+}
+
+/** Default transport; custom transport selection stays in client configuration. */
+export class FetchSwaggerHttpClient implements SwaggerHttpClient {
+  constructor(private readonly fetchImpl: typeof globalThis.fetch = globalThis.fetch) {}
+
+  async request<T>(request: SwaggerHttpRequest): Promise<SwaggerHttpResponse<T>> {
+    const url = new URL(request.url);
+    for (const [key, value] of Object.entries(request.query ?? {})) {
+      if (value === undefined || value === null) continue;
+      if (Array.isArray(value)) {
+        for (const item of value) url.searchParams.append(key, String(item));
+      } else url.searchParams.set(key, String(value));
+    }
+    const headers = { ...request.headers };
+    if (request.body !== undefined) headers['content-type'] ??= 'application/json';
+    const response = await this.fetchImpl(url.toString(), {
+      method: request.method, headers, signal: request.signal,
+      body: request.body === undefined ? undefined : JSON.stringify(request.body)
+    });
+    if (!response.ok) throw new SwaggerHttpError(response);
+    const text = request.method === 'HEAD' || response.status === 204 || response.status === 205
+      ? '' : await response.text();
+    const responseHeaders: Record<string, readonly string[]> = {};
+    response.headers.forEach((value, key) => { responseHeaders[key.toLowerCase()] = [value]; });
+    // Fetch combines most repeated headers. Preserve individually exposed cookies where supported.
+    const cookies = (response.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie?.();
+    if (cookies?.length) responseHeaders['set-cookie'] = cookies;
+    return { status: response.status, body: text === '' ? null : JSON.parse(text) as T,
+      headers: responseHeaders, url: response.url || null, empty: text === '' };
+  }
 }
 
 /**
@@ -66,7 +134,13 @@ export interface SwaggerEndpointClient<TEndpoint extends AnyApiEndpoint> {
    * @returns A promise of the endpoint response type.
    * @throws When request construction, fetching, or JSON parsing fails; unsuccessful responses reject with SwaggerHttpError.
    */
-  request(variables?: SwaggerRequestVariables<TEndpoint>): Promise<ResponseOf<TEndpoint>>;
+  request(variables: SwaggerRequestVariables<TEndpoint> | undefined,
+    options: SwaggerRequestOptions & { observe: 'response' }): Promise<SwaggerHttpResponse<ResponseOf<TEndpoint>>>;
+  request(variables?: SwaggerRequestVariables<TEndpoint>,
+    options?: SwaggerRequestOptions & { observe?: 'body' }): Promise<ResponseOf<TEndpoint>>;
+  request(variables: SwaggerRequestVariables<TEndpoint> | undefined,
+    options: SwaggerRequestOptions): Promise<ResponseOf<TEndpoint> | SwaggerHttpResponse<ResponseOf<TEndpoint>>>;
+  prepare(variables?: SwaggerRequestVariables<TEndpoint>, options?: SwaggerRequestOptions): SwaggerPreparedRequest<ResponseOf<TEndpoint>>;
 }
 
 /**
@@ -94,32 +168,64 @@ export function createSwaggerClient<TEndpoint extends AnyApiEndpoint>(
   endpoint: TEndpoint,
   config: SwaggerClientConfig
 ): SwaggerEndpointClient<TEndpoint> {
-  return {
+  const client = new SwaggerClientService(config);
+  function request(variables: SwaggerRequestVariables<TEndpoint> | undefined,
+    options: SwaggerRequestOptions & { observe: 'response' }): Promise<SwaggerHttpResponse<ResponseOf<TEndpoint>>>;
+  function request(variables?: SwaggerRequestVariables<TEndpoint>,
+    options?: SwaggerRequestOptions & { observe?: 'body' }): Promise<ResponseOf<TEndpoint>>;
+  function request(variables: SwaggerRequestVariables<TEndpoint> | undefined,
+    options: SwaggerRequestOptions): Promise<ResponseOf<TEndpoint> | SwaggerHttpResponse<ResponseOf<TEndpoint>>>;
+  function request(variables?: SwaggerRequestVariables<TEndpoint>, options: SwaggerRequestOptions = {}
+  ): Promise<ResponseOf<TEndpoint> | SwaggerHttpResponse<ResponseOf<TEndpoint>>> {
+    return client.request(endpoint, variables, options);
+  }
+  return { request, prepare: (variables, options) => client.prepare(endpoint, variables, options) };
+}
 
-    /**
-     * Sends a request using the configured fetch implementation.
-     *
-     * @param variables The endpoint path, query, header, and body values.
-     * @returns The parsed response body, or undefined for an empty response or HEAD request.
-     * @throws When a path variable is missing, the URL is invalid, fetching fails, the HTTP status is unsuccessful, or JSON parsing fails.
-     */
-    async request(variables?: SwaggerRequestVariables<TEndpoint>): Promise<ResponseOf<TEndpoint>> {
-      const fetchImpl = config.fetch ?? globalThis.fetch;
-      const request = buildRequest(config, endpoint, variables);
-      const response = await fetchImpl(request.url, request.init);
+/** Framework-independent service with the same endpoint-based API as Angular. */
+export class SwaggerClientService {
+  private readonly http: SwaggerHttpClient;
+  constructor(private readonly config: SwaggerClientConfig) {
+    this.http = config.httpClient ?? new FetchSwaggerHttpClient(config.fetch);
+  }
 
-      if (!response.ok) {
-        throw new SwaggerHttpError(response);
+  request<TEndpoint extends AnyApiEndpoint>(endpoint: TEndpoint,
+    variables: SwaggerRequestVariables<TEndpoint> | undefined,
+    options: SwaggerRequestOptions & { observe: 'response' }): Promise<SwaggerHttpResponse<ResponseOf<TEndpoint>>>;
+  request<TEndpoint extends AnyApiEndpoint>(endpoint: TEndpoint,
+    variables?: SwaggerRequestVariables<TEndpoint>,
+    options?: SwaggerRequestOptions & { observe?: 'body' }): Promise<ResponseOf<TEndpoint>>;
+  request<TEndpoint extends AnyApiEndpoint>(endpoint: TEndpoint,
+    variables: SwaggerRequestVariables<TEndpoint> | undefined,
+    options: SwaggerRequestOptions): Promise<ResponseOf<TEndpoint> | SwaggerHttpResponse<ResponseOf<TEndpoint>>>;
+  async request<TEndpoint extends AnyApiEndpoint>(endpoint: TEndpoint,
+    variables?: SwaggerRequestVariables<TEndpoint>, options: SwaggerRequestOptions = {}
+  ): Promise<ResponseOf<TEndpoint> | SwaggerHttpResponse<ResponseOf<TEndpoint>>> {
+    const prepared = this.prepare(endpoint, variables, options);
+    return options.observe === 'response' ? prepared.sendResponse() : prepared.send();
+  }
+
+  prepare<TEndpoint extends AnyApiEndpoint>(endpoint: TEndpoint,
+    variables?: SwaggerRequestVariables<TEndpoint>, options: SwaggerRequestOptions = {}
+  ): SwaggerPreparedRequest<ResponseOf<TEndpoint>> {
+    const request = snapshot(buildRequest(this.config, endpoint, variables));
+    request.headers = mergeHeaders(request.headers, options.headers);
+    request.signal = options.signal;
+    const sendResponse = async () => {
+      const response = await this.http.request<ResponseOf<TEndpoint>>(snapshot(request));
+      if (response.status < 200 || response.status >= 300) throw new SwaggerHttpError(response);
+      return request.method === 'HEAD' || response.status === 204 || response.status === 205
+        ? { ...response, body: null, empty: true } : response;
+    };
+    return { request: snapshot(request), sendResponse,
+      send: async () => {
+        const response = await sendResponse();
+        // Preserve the legacy undefined for empty responses, and null for a JSON null body.
+        if (response.empty || request.method === 'HEAD' || response.status === 204 || response.status === 205) return undefined as ResponseOf<TEndpoint>;
+        return response.body as ResponseOf<TEndpoint>;
       }
-
-      if (response.status === 204 || endpoint.method === 'HEAD') {
-        return undefined as ResponseOf<TEndpoint>;
-      }
-
-      const body = await response.text();
-      return (body === '' ? undefined : JSON.parse(body)) as ResponseOf<TEndpoint>;
-    }
-  };
+    };
+  }
 }
 
 /**
@@ -132,7 +238,7 @@ export class SwaggerHttpError extends Error {
    *
    * @param response The failed fetch response.
    */
-  constructor(readonly response: Response) {
+  constructor(readonly response: Response | SwaggerHttpResponse<unknown>) {
     super('Swagger request failed with status ' + response.status + '.');
   }
 }
@@ -141,7 +247,7 @@ function buildRequest<TEndpoint extends AnyApiEndpoint>(
   config: SwaggerClientConfig,
   endpoint: TEndpoint,
   variables?: SwaggerRequestVariables<TEndpoint>
-): { url: string; init: RequestInit } {
+): SwaggerHttpRequest {
   const pathVariables = variables?.pathVariables as Record<string, unknown> | undefined;
   const queryVariables = variables?.queryVariables as Record<string, unknown> | undefined;
   const headerVariables = variables?.headerVariables as Record<string, unknown> | undefined;
@@ -155,39 +261,27 @@ function buildRequest<TEndpoint extends AnyApiEndpoint>(
 
     return encodeURIComponent(String(value));
   });
-  const url = new URL(joinUrl(config.baseUrl, path));
-
-  for (const [key, value] of Object.entries(queryVariables ?? {})) {
-    if (value === undefined || value === null) {
-      continue;
-    }
-
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        url.searchParams.append(key, String(item));
-      }
-    } else {
-      url.searchParams.set(key, String(value));
-    }
-  }
-
-  const headers = {
-    ...config.headers,
-    ...stringifyRecord(headerVariables)
-  };
-
-  if (bodyVariables !== undefined) {
-    headers['content-type'] ??= 'application/json';
-  }
-
   return {
-    url: url.toString(),
-    init: {
-      method: endpoint.method,
-      headers,
-      body: bodyVariables === undefined ? undefined : JSON.stringify(bodyVariables)
-    }
+    method: endpoint.method,
+    url: new URL(joinUrl(config.baseUrl, path)).toString(),
+    headers: mergeHeaders(config.headers, stringifyRecord(headerVariables)),
+    query: queryVariables,
+    body: bodyVariables
   };
+}
+
+function snapshot(request: SwaggerHttpRequest): SwaggerHttpRequest {
+  return { ...request, headers: request.headers && { ...request.headers },
+    query: request.query && structuredClone(request.query),
+    body: request.body === undefined ? undefined : structuredClone(request.body) };
+}
+
+function mergeHeaders(...records: (Record<string, string> | undefined)[]): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const record of records) {
+    for (const [key, value] of Object.entries(record ?? {})) result[key.toLowerCase()] = value;
+  }
+  return result;
 }
 
 function stringifyRecord(record: Record<string, unknown> | undefined): Record<string, string> | undefined {
