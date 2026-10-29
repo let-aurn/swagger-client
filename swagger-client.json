@@ -1,4 +1,5 @@
 {
+  "$schema": "./schema.json",
   "input": "test/fixtures",
   "api-models.ts": {
     "output": "generated/api-models.ts"

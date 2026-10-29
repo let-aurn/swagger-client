@@ -64,6 +64,9 @@ export function validateConfig(config: SwaggerClientConfig, configPath: string):
   if (!config || typeof config !== "object" || Array.isArray(config)) {
     throw new Error(`${configPath}: configuration must be an object.`);
   }
+  if (config.$schema !== undefined && (typeof config.$schema !== "string" || !config.$schema.trim())) {
+    throw new Error(`${configPath}: "$schema" must be a non-empty string.`);
+  }
   if (isGroupedConfig(config)) {
     validateGroupedConfig(config, configPath);
     return;
@@ -103,7 +106,7 @@ function validateGroupedConfig(config: GroupedSwaggerClientConfig, source: strin
   if (legacyKeys.some(key => Object.hasOwn(config, key))) {
     throw new Error(`${source}: cannot mix legacy configuration keys with the grouped configuration.`);
   }
-  assertKeys(config, ["input", "namespace", "api-models.ts", "api-endpoints.ts", "swagger-client.ts"], source);
+  assertKeys(config, ["$schema", "input", "namespace", "api-models.ts", "api-endpoints.ts", "swagger-client.ts"], source);
   validateSwaggerInput(config.input, `${source}: input`);
   for (const key of ["api-models.ts", "api-endpoints.ts", "swagger-client.ts"] as const) {
     const section = config[key];
