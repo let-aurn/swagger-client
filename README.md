@@ -25,8 +25,17 @@ for React.
 
 ## Config
 
+Add the optional `$schema` property for editor completion, hover descriptions,
+and validation. The schema ships with the installed package; adjust the relative
+path when your config lives in a subdirectory. The generator does not fetch it.
+For `npx` without a local installation, use a schema URL pinned to a release tag,
+such as `https://raw.githubusercontent.com/let-aurn/swagger-client/v<VERSION>/schema.json`
+(replace `<VERSION>` with a release containing the schema). CLI checks still validate
+regular expressions and values extracted from OpenAPI documents during generation.
+
 ```json
 {
+  "$schema": "./node_modules/@let-aurn/swagger-client/schema.json",
   "input": "path/to/swaggers",
   "api-models.ts": {
     "output": "src/app/api/generated/api-models.ts"

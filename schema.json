@@ -1,0 +1,375 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/let-aurn/swagger-client/main/schema.json",
+  "title": "Swagger Client configuration",
+  "description": "Generate Angular or React clients from OpenAPI JSON documents. Use one configuration format per file.",
+  "oneOf": [
+    {
+      "$ref": "#/definitions/grouped"
+    },
+    {
+      "$ref": "#/definitions/legacy"
+    }
+  ],
+  "definitions": {
+    "schema": {
+      "type": "string",
+      "pattern": "\\S",
+      "description": "Optional editor schema path or URL. The generator does not fetch it."
+    },
+    "input": {
+      "description": "Directory, file, glob, or include/exclude patterns, relative to the working directory. Only JSON files are read.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "\\S",
+          "not": {
+            "const": "!"
+          },
+          "allOf": [
+            {
+              "type": "string",
+              "pattern": "^(?!!(?!\\())"
+            }
+          ]
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "\\S",
+            "not": {
+              "const": "!"
+            }
+          },
+          "contains": {
+            "type": "string",
+            "pattern": "^(?!!(?!\\())"
+          }
+        }
+      ]
+    },
+    "output": {
+      "type": "string",
+      "pattern": "\\S",
+      "description": "Output file path, resolved relative to the command working directory."
+    },
+    "framework": {
+      "type": "string",
+      "enum": [
+        "angular",
+        "react"
+      ],
+      "description": "Framework client to generate."
+    },
+    "enumStyle": {
+      "type": "string",
+      "enum": [
+        "union",
+        "enum"
+      ],
+      "default": "union",
+      "description": "Emit literal unions or named runtime enums."
+    },
+    "merge": {
+      "type": "boolean",
+      "default": false,
+      "description": "Merge structurally equivalent schemas with the same original name within each namespace."
+    },
+    "serverIndex": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Zero-based index in each document servers array. Omit to preserve operation paths."
+    },
+    "namespace": {
+      "type": "object",
+      "properties": {
+        "pointer": {
+          "type": "string",
+          "pattern": "^(?:\\/(?:[^~]|~[01])*)*$",
+          "description": "JSON Pointer to a string in each document. Escape ~ as ~0 and / as ~1."
+        },
+        "pattern": {
+          "type": "string",
+          "description": "JavaScript regex without delimiters or flags. Uses the first capture group, or full match. Syntax is checked by the CLI."
+        }
+      },
+      "required": [
+        "pointer"
+      ]
+    },
+    "prefix": {
+      "type": "string",
+      "default": "",
+      "pattern": "^(?:|(?:[A-Za-z_$]|\\$\\{namespace\\})(?:[A-Za-z0-9_$]|\\$\\{namespace\\})*)$",
+      "description": "Declaration prefix. Only ${namespace} substitution is supported; it requires a namespace resolver."
+    },
+    "grouped": {
+      "type": "object",
+      "properties": {
+        "$schema": {
+          "$ref": "#/definitions/schema"
+        },
+        "input": {
+          "$ref": "#/definitions/input"
+        },
+        "namespace": {
+          "$ref": "#/definitions/namespace"
+        },
+        "api-models.ts": {
+          "type": "object",
+          "properties": {
+            "output": {
+              "$ref": "#/definitions/output"
+            },
+            "enumStyle": {
+              "$ref": "#/definitions/enumStyle"
+            },
+            "mergeDeclarations": {
+              "$ref": "#/definitions/merge"
+            },
+            "prefix": {
+              "$ref": "#/definitions/prefix"
+            }
+          },
+          "required": [
+            "output"
+          ],
+          "additionalProperties": false
+        },
+        "api-endpoints.ts": {
+          "type": "object",
+          "properties": {
+            "output": {
+              "$ref": "#/definitions/output"
+            },
+            "naming": {
+              "type": "string",
+              "enum": [
+                "operationId",
+                "tag_operationId",
+                "namespace_operationId",
+                "namespace_tag_operationId"
+              ],
+              "default": "operationId",
+              "description": "Endpoint name format. Namespace formats require the top-level namespace resolver."
+            },
+            "serverIndex": {
+              "$ref": "#/definitions/serverIndex"
+            }
+          },
+          "required": [
+            "output"
+          ],
+          "additionalProperties": false
+        },
+        "swagger-client.ts": {
+          "type": "object",
+          "properties": {
+            "output": {
+              "$ref": "#/definitions/output"
+            },
+            "framework": {
+              "$ref": "#/definitions/framework"
+            }
+          },
+          "required": [
+            "output",
+            "framework"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "input",
+        "api-models.ts",
+        "api-endpoints.ts",
+        "swagger-client.ts"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "api-endpoints.ts": {
+                "properties": {
+                  "naming": {
+                    "enum": [
+                      "namespace_operationId",
+                      "namespace_tag_operationId"
+                    ]
+                  }
+                },
+                "required": [
+                  "naming"
+                ]
+              }
+            },
+            "required": [
+              "api-endpoints.ts"
+            ]
+          },
+          "then": {
+            "required": [
+              "namespace"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "api-models.ts": {
+                "properties": {
+                  "prefix": {
+                    "type": "string",
+                    "pattern": "\\$\\{namespace\\}"
+                  }
+                },
+                "required": [
+                  "prefix"
+                ]
+              }
+            },
+            "required": [
+              "api-models.ts"
+            ]
+          },
+          "then": {
+            "required": [
+              "namespace"
+            ]
+          }
+        }
+      ]
+    },
+    "legacy": {
+      "type": "object",
+      "properties": {
+        "$schema": {
+          "$ref": "#/definitions/schema"
+        },
+        "client": {
+          "$ref": "#/definitions/framework"
+        },
+        "swaggers-directory": {
+          "$ref": "#/definitions/input"
+        },
+        "enum-style": {
+          "$ref": "#/definitions/enumStyle"
+        },
+        "mergeDeclarations": {
+          "$ref": "#/definitions/merge"
+        },
+        "serverUrlIndex": {
+          "$ref": "#/definitions/serverIndex"
+        },
+        "endpoint-name-strategy": {
+          "type": "string",
+          "enum": [
+            "operationId",
+            "tagAndOperationId",
+            "namespaceTagAndOperationId"
+          ],
+          "default": "operationId"
+        },
+        "endpoint-namespace": {
+          "$ref": "#/definitions/namespace"
+        },
+        "output": {
+          "type": "object",
+          "properties": {
+            "api-models.ts": {
+              "type": "string",
+              "minLength": 1
+            },
+            "api-endpoints.ts": {
+              "type": "string",
+              "minLength": 1
+            },
+            "client.ts": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "api-models.ts",
+            "api-endpoints.ts",
+            "client.ts"
+          ]
+        }
+      },
+      "required": [
+        "client",
+        "swaggers-directory",
+        "output"
+      ],
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "input"
+            ]
+          },
+          {
+            "required": [
+              "namespace"
+            ]
+          },
+          {
+            "required": [
+              "api-models.ts"
+            ]
+          },
+          {
+            "required": [
+              "api-endpoints.ts"
+            ]
+          },
+          {
+            "required": [
+              "swagger-client.ts"
+            ]
+          }
+        ]
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "endpoint-name-strategy": {
+                "const": "namespaceTagAndOperationId"
+              }
+            },
+            "required": [
+              "endpoint-name-strategy"
+            ]
+          },
+          "then": {
+            "required": [
+              "endpoint-namespace"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mergeDeclarations": {
+                "const": true
+              }
+            },
+            "required": [
+              "mergeDeclarations"
+            ]
+          },
+          "then": {
+            "required": [
+              "endpoint-namespace"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

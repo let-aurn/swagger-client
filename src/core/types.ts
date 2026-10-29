@@ -24,6 +24,8 @@ export interface GenerationResult {
 }
 
 export interface GroupedSwaggerClientConfig {
+  /** Optional editor schema path or URL. Not fetched by the generator. */
+  $schema?: string;
   input: string | string[];
   namespace?: EndpointNamespaceConfig;
   "api-models.ts": {
@@ -46,6 +48,8 @@ export interface GroupedSwaggerClientConfig {
 
 /** @deprecated Use the configuration grouped by generated file instead. */
 export interface LegacySwaggerClientConfig {
+  /** Optional editor schema path or URL. Not fetched by the generator. */
+  $schema?: string;
   client: ClientKind;
   /** Emit literal unions by default, or named runtime enums. */
   "enum-style"?: EnumStyle;
