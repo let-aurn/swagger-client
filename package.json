@@ -1,6 +1,6 @@
 {
   "name": "@let-aurn/swagger-client",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Generate typed Angular and React clients from OpenAPI JSON files.",
   "type": "module",
   "bin": {
@@ -32,10 +32,10 @@
     "node": ">=20"
   },
   "devDependencies": {
-    "@angular/common": "^20.3.34",
-    "@angular/compiler": "^20.3.34",
-    "@angular/core": "^20.3.34",
-    "@types/node": "^24.0.0",
+    "@angular/common": "^20.3.35",
+    "@angular/compiler": "^20.3.35",
+    "@angular/core": "^20.3.35",
+    "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
     "ajv": "^8.20.0",
     "react": "^19.3.1",
